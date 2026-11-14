@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Peramalan Konsumsi Listrik Harian - LSTM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <!-- Navigasi -->
+    <header class="navbar" id="navbar">
+        <div class="container nav-inner">
+            <a href="#beranda" class="brand">
+                <span class="brand-mark"></span>
+                <span>ListrikLSTM</span>
+            </a>
+            <button type="button" class="nav-toggle" id="navToggle" aria-label="Buka menu" aria-expanded="false">
+                <span></span><span></span><span></span>
+            </button>
+            <nav class="nav-links" id="navLinks">
+                <a href="#beranda" class="nav-link active" data-section="beranda">Beranda</a>
+                <a href="#data" class="nav-link" data-section="data">Data Historis</a>
+                <a href="#evaluasi" class="nav-link" data-section="evaluasi">Evaluasi Model</a>
+                <a href="#peramalan" class="nav-link" data-section="peramalan">Peramalan</a>
+                <a href="#tentang" class="nav-link" data-section="tentang">Tentang</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+
+        <!-- Beranda -->
+        <section id="beranda">
+            <div class="hero">
+                <div class="container hero-inner">
+                    <span class="badge">Proyek Akhir Pembelajaran Mesin - Modul 04 LSTM</span>
+                    <h1>Peramalan Konsumsi Listrik Harian Berdasarkan Data Cuaca</h1>
+                    <p>Model Long Short-Term Memory yang mempelajari pola konsumsi listrik dari 30 hari terakhir beserta suhu, angin, dan curah hujan, lalu meramalkan konsumsi hari berikutnya.</p>
+                    <div class="hero-actions">
+                        <a href="#peramalan" class="btn btn-light">Coba Peramalan</a>
+                        <a href="#data" class="btn btn-ghost-light">Lihat Data Historis</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="container">
+                <div id="errorGlobal" class="alert alert-error hidden">Data aplikasi gagal dimuat. Pastikan file model sudah dibuat dengan menjalankan train_model.py, lalu muat ulang halaman.</div>
+
+                <div class="stats">
+                    <div class="stat-card tone-indigo">
+                        <span class="stat-label">Jumlah Data</span>
+                        <strong class="stat-value" id="statJumlah">-</strong>
+                        <span class="stat-note">baris data harian</span>
+                    </div>
+                    <div class="stat-card tone-cyan">
+                        <span class="stat-label">Rentang Data</span>
+                        <strong class="stat-value small-value" id="statRentang">-</strong>
+                        <span class="stat-note">awal sampai akhir data</span>
+                    </div>
+                    <div class="stat-card tone-amber">
+                        <span class="stat-label">RMSE</span>
+                        <strong class="stat-value" id="statRmse">-</strong>
+                        <span class="stat-note">pada data uji</span>
+                    </div>
+                    <div class="stat-card tone-rose">
+                        <span class="stat-label">MAE</span>
+                        <strong class="stat-value" id="statMae">-</strong>
+                        <span class="stat-note">pada data uji</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Data Historis -->
+        <section id="data" class="section">
+            <div class="container">
+                <div class="section-head">
+                    <span class="eyebrow tone-indigo">Data Historis</span>
+                    <h2>Pergerakan Data Seiring Waktu</h2>
+                    <p class="muted">Pilih variabel dan rentang waktu untuk melihat tren dan pola musiman pada data.</p>
+                </div>
+
+                <div class="card">
+                    <div class="controls">
+                        <div class="control-group">
+                            <span class="control-label">Variabel</span>
+                            <div class="chip-group" id="grupVariabel">
+                                <button type="button" class="chip tone-indigo active" data-var="daily_consumption" aria-pressed="true">Konsumsi Listrik</button>
+                                <button type="button" class="chip tone-rose" data-var="TMAX" aria-pressed="false">Suhu Maks (TMAX)</button>
+                                <button type="button" class="chip tone-cyan" data-var="TMIN" aria-pressed="false">Suhu Min (TMIN)</button>
+                                <button type="button" class="chip tone-emerald" data-var="AWND" aria-pressed="false">Angin (AWND)</button>
+                                <button type="button" class="chip tone-amber" data-var="PRCP" aria-pressed="false">Hujan (PRCP)</button>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <span class="control-label">Rentang</span>
+                            <div class="chip-group" id="grupRentang">
+                                <button type="button" class="chip" data-rentang="30" aria-pressed="false">30 Hari</button>
+                                <button type="button" class="chip" data-rentang="90" aria-pressed="false">90 Hari</button>
+                                <button type="button" class="chip" data-rentang="365" aria-pressed="false">1 Tahun</button>
+                                <button type="button" class="chip active" data-rentang="all" aria-pressed="true">Semua</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chart-box"><canvas id="chartHistoris"></canvas></div>
+
+                    <div class="mini-stats">
+                        <div><span>Variabel</span><strong id="statJudulVar">-</strong></div>
+                        <div><span>Rata-rata</span><strong id="statRata">-</strong></div>
+                        <div><span>Maksimum</span><strong id="statMaks">-</strong></div>
+                        <div><span>Minimum</span><strong id="statMin">-</strong></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Evaluasi Model -->
+        <section id="evaluasi" class="section alt">
+            <div class="container">
+                <div class="section-head">
+                    <span class="eyebrow tone-cyan">Evaluasi Model</span>
+                    <h2>Seberapa Baik Model Meramal</h2>
+                    <p class="muted">Hasil pengujian model pada data uji yang tidak dipakai saat pelatihan.</p>
+                </div>
+
+                <div class="stats stats-flat">
+                    <div class="stat-card tone-indigo">
+                        <span class="stat-label">RMSE</span>
+                        <strong class="stat-value" id="metricRmse">-</strong>
+                        <span class="stat-note">akar rata-rata kuadrat selisih</span>
+                    </div>
+                    <div class="stat-card tone-cyan">
+                        <span class="stat-label">MAE</span>
+                        <strong class="stat-value" id="metricMae">-</strong>
+                        <span class="stat-note">rata-rata selisih absolut</span>
+                    </div>
+                    <div class="stat-card tone-amber">
+                        <span class="stat-label">MAPE</span>
+                        <strong class="stat-value" id="metricMape">-</strong>
+                        <span class="stat-note">rata-rata persentase kesalahan</span>
+                    </div>
+                    <div class="stat-card tone-rose">
+                        <span class="stat-label">RMSE Baseline</span>
+                        <strong class="stat-value" id="metricBase">-</strong>
+                        <span class="stat-note">tebakan: sama seperti kemarin</span>
+                    </div>
+                </div>
+                <p class="banding" id="teksBanding"></p>
+
+                <div class="grid-2">
+                    <div class="card">
+                        <div class="card-head">
+                            <h3>Aktual vs Prediksi</h3>
+                            <div class="chip-group" id="grupEvaluasi">
+                                <button type="button" class="chip" data-erange="60" aria-pressed="false">60 Hari</button>
+                                <button type="button" class="chip active" data-erange="all" aria-pressed="true">Semua</button>
+                            </div>
+                        </div>
+                        <div class="chart-box"><canvas id="chartEvaluasi"></canvas></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-head"><h3>Loss Selama Pelatihan</h3></div>
+                        <div class="chart-box"><canvas id="chartLoss"></canvas></div>
+                    </div>
+                </div>
+
+                <div class="grid-2">
+                    <div class="card">
+                        <div class="card-head"><h3>10 Hasil Terakhir pada Data Uji</h3></div>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr><th>Tanggal</th><th>Aktual</th><th>Prediksi</th><th>Selisih</th></tr>
+                                </thead>
+                                <tbody id="tabelEvaluasi"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-head"><h3>Konfigurasi Model</h3></div>
+                        <dl class="info-list">
+                            <div><dt>Timesteps</dt><dd id="infoTimesteps">-</dd></div>
+                            <div><dt>Fitur input</dt><dd id="infoFitur">-</dd></div>
+                            <div><dt>Data latih</dt><dd id="infoTrain">-</dd></div>
+                            <div><dt>Data uji</dt><dd id="infoTest">-</dd></div>
+                            <div><dt>Epoch berjalan</dt><dd id="infoEpoch">-</dd></div>
+                            <div><dt>Arsitektur</dt><dd>LSTM 64, Dropout 0.2, LSTM 32, Dropout 0.2, Dense 16, Dense 1</dd></div>
+                            <div><dt>Optimizer dan loss</dt><dd>Adam, mean squared error</dd></div>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Peramalan -->
+        <section id="peramalan" class="section">
+            <div class="container">
+                <div class="section-head">
+                    <span class="eyebrow tone-emerald">Peramalan</span>
+                    <h2>Ramalkan Konsumsi Listrik</h2>
+                    <p class="muted">Peramalan dimulai dari hari setelah data terakhir pada dataset.</p>
+                </div>
+
+                <div class="forecast-grid">
+                    <div class="card">
+                        <h3>Pengaturan Peramalan</h3>
+
+                        <div class="control-group">
+                            <span class="control-label">Jumlah hari ke depan</span>
+                            <div class="chip-group" id="grupHari">
+                                <button type="button" class="chip tone-emerald active" data-hari="1" aria-pressed="true">1 Hari</button>
+                                <button type="button" class="chip tone-emerald" data-hari="3" aria-pressed="false">3 Hari</button>
+                                <button type="button" class="chip tone-emerald" data-hari="7" aria-pressed="false">7 Hari</button>
+                                <button type="button" class="chip tone-emerald" data-hari="14" aria-pressed="false">14 Hari</button>
+                            </div>
+                        </div>
+
+                        <span class="control-label spaced">Skenario cuaca hari mendatang</span>
+                        <div class="field-grid">
+                            <div class="field">
+                                <label for="inTmax">Suhu maksimum (TMAX)</label>
+                                <input type="number" step="any" id="inTmax">
+                            </div>
+                            <div class="field">
+                                <label for="inTmin">Suhu minimum (TMIN)</label>
+                                <input type="number" step="any" id="inTmin">
+                            </div>
+                            <div class="field">
+                                <label for="inAwnd">Kecepatan angin (AWND)</label>
+                                <input type="number" step="any" min="0" id="inAwnd">
+                            </div>
+                            <div class="field">
+                                <label for="inPrcp">Curah hujan (PRCP)</label>
+                                <input type="number" step="any" min="0" id="inPrcp">
+                            </div>
+                        </div>
+                        <p class="hint" id="catatanSkenario"></p>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-solid" id="btnRamal">Jalankan Peramalan</button>
+                            <button type="button" class="btn btn-outline" id="btnReset">Atur Ulang</button>
+                        </div>
+                        <div id="pesanRamalan" class="alert alert-error hidden" role="alert"></div>
+                    </div>
+
+                    <div class="card">
+                        <h3>Hasil Peramalan</h3>
+
+                        <div id="hasilKosong" class="empty-state">
+                            Pilih jumlah hari lalu tekan tombol Jalankan Peramalan untuk melihat hasilnya di sini.
+                        </div>
+
+                        <div id="hasilRamalan" class="hidden">
+                            <div class="result-cards">
+                                <div class="result-card tone-emerald">
+                                    <span>Ramalan hari pertama</span>
+                                    <strong id="ramalPertamaNilai">-</strong>
+                                    <em id="ramalPertamaTgl">-</em>
+                                </div>
+                                <div class="result-card tone-violet" id="cardAkhir">
+                                    <span>Ramalan hari terakhir</span>
+                                    <strong id="ramalAkhirNilai">-</strong>
+                                    <em id="ramalAkhirTgl">-</em>
+                                </div>
+                            </div>
+                            <div class="chart-box short"><canvas id="chartRamalan"></canvas></div>
+                            <div class="table-wrap">
+                                <table>
+                                    <thead><tr><th>Tanggal</th><th>Konsumsi Prediksi</th></tr></thead>
+                                    <tbody id="tabelRamalan"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tentang -->
+        <section id="tentang" class="section alt">
+            <div class="container">
+                <div class="section-head">
+                    <span class="eyebrow tone-amber">Tentang Proyek</span>
+                    <h2>Latar Belakang dan Metode</h2>
+                </div>
+
+                <div class="grid-3">
+                    <div class="card tone-indigo top-line">
+                        <h3>Studi Kasus</h3>
+                        <p>Konsumsi listrik berubah setiap hari dan dipengaruhi cuaca, misalnya suhu yang rendah membuat pemakaian naik. Peramalan konsumsi harian membantu perencanaan penggunaan energi.</p>
+                    </div>
+                    <div class="card tone-cyan top-line">
+                        <h3>Dataset</h3>
+                        <p>Dataset Kaggle Electricity Consumption Based On Weather Data. Konsumsi listrik harian berasal dari dataset Individual Household Electric Power Consumption, digabung dengan data cuaca NOAA GHCN-Daily.</p>
+                    </div>
+                    <div class="card tone-rose top-line">
+                        <h3>Keterbatasan</h3>
+                        <p>Data berasal dari satu rumah tangga pada periode 2006 sampai 2010. Peramalan lebih dari satu hari memakai skenario cuaca yang diasumsikan, sehingga akurasinya menurun.</p>
+                    </div>
+                </div>
+
+                <div class="card steps-card">
+                    <h3>Alur Pengerjaan</h3>
+                    <ol class="steps">
+                        <li><span class="step-no tone-indigo">1</span><div><strong>Eksplorasi dan pembersihan data</strong><p>Data diplot terhadap waktu, tanggal yang bolong dilengkapi, dan nilai kosong diisi dengan interpolasi.</p></div></li>
+                        <li><span class="step-no tone-cyan">2</span><div><strong>Normalisasi</strong><p>Semua fitur diubah ke rentang 0 sampai 1 dengan MinMaxScaler.</p></div></li>
+                        <li><span class="step-no tone-emerald">3</span><div><strong>Windowing</strong><p>30 hari terakhir dipakai untuk memprediksi hari berikutnya dalam format tensor 3D (samples, timesteps, features).</p></div></li>
+                        <li><span class="step-no tone-amber">4</span><div><strong>Pelatihan model LSTM</strong><p>Dua lapisan LSTM dengan Dropout untuk mencegah overfitting, dilatih memakai optimizer Adam.</p></div></li>
+                        <li><span class="step-no tone-rose">5</span><div><strong>Evaluasi dan penerapan</strong><p>Hasil diukur dengan RMSE, MAE, dan MAPE, lalu model dan scaler disimpan untuk dipakai aplikasi Flask ini.</p></div></li>
+                    </ol>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container footer-inner">
+            <div>
+                <strong>Selsa Shafana Alfiyani</strong>
+                <span>NIM 301240041, Kelas 5b</span>
+            </div>
+            <div class="footer-right">
+                <span>Teknik Informatika, Universitas Bale Bandung</span>
+                <span>Mata Kuliah Pembelajaran Mesin, <span id="tahun"></span></span>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
